@@ -1,0 +1,288 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>elc.games</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #1a1a1a;
+            margin: 0;
+            padding: 20px;
+            color: #ffffff;
+        }
+        .games-container {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+            gap: 20px;
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        .game-card {
+            background: #2d2d2d;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+            overflow: hidden;
+            transition: transform 0.2s;
+        }
+        .game-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 4px 8px rgba(0,0,0,0.3);
+        }
+        .game-thumbnail {
+            width: 100%;
+            height: 150px;
+            object-fit: cover;
+        }
+        .game-info {
+            padding: 15px;
+        }
+        .game-title {
+            font-size: 18px;
+            font-weight: bold;
+            margin: 0 0 10px 0;
+            color: #ffffff;
+        }
+        .game-stats {
+            display: flex;
+            justify-content: space-between;
+            font-size: 14px;
+            color: #a0a0a0;
+        }
+        .stats-summary {
+            background: #2d2d2d;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+            padding: 20px;
+            margin-bottom: 30px;
+            max-width: 1200px;
+            margin: 0 auto 30px auto;
+            text-align: center;
+        }
+        .stats-summary h2 {
+            margin: 0 0 15px 0;
+            color: #ffffff;
+        }
+        .total-stats {
+            display: flex;
+            justify-content: center;
+            gap: 40px;
+        }
+        .stat-item {
+            font-size: 18px;
+            color: #a0a0a0;
+        }
+        .stat-value {
+            font-weight: bold;
+            color: #ffffff;
+            font-size: 24px;
+            display: block;
+        }
+        .static-text {
+            padding: 0 2px;
+        }
+        .game-ccu, .stat-value {
+            transition: --num 0.25s;
+            counter-reset: num var(--num);
+        }
+        
+        /*.game-ccu::before, .stat-value::before {
+            content: counter(num);
+        }*/
+        @keyframes numberChange {
+            0% {
+                opacity: 1;
+                transform: translateY(0);
+            }
+            50% {
+                opacity: 0;
+                transform: translateY(-10px);
+            }
+            51% {
+                opacity: 0;
+                transform: translateY(10px);
+            }
+            100% {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .game-ccu, .stat-value {
+            display: inline-block;
+        }
+
+        .game-ccu.updating, .stat-value.updating {
+            animation: numberChange 0.5s ease-in-out;
+        }
+    </style>
+</head>
+<body>
+    <div class="stats-summary">
+        <h2>elc.games</h2>
+        <div class="total-stats">
+            <div class="stat-item">
+                <span class="stat-value" id="totalPlaying">-</span>
+                Currently Playing
+            </div>
+            <div class="stat-item">
+                <span class="stat-value" id="totalVisits">-</span>
+                Total Visits
+            </div>
+        </div>
+    </div>
+    <div class="games-container" id="gamesContainer"></div>
+
+    <script>
+        // Array of specific place IDs to display
+        const PLACE_IDS = [
+            '5495368354',  // Crazy Babies
+            '12366490284',  // Draw Things and Turn Into Them
+            '11938746175',  // Elected Admin
+            '14708545931'   // Blade Soccer
+        ];
+        
+        async function fetchUniverseId(placeId) {
+            try {
+                const response = await fetch(`https://apis.roproxy.com/universes/v1/places/${placeId}/universe`);
+                const data = await response.json();
+                return data.universeId;
+            } catch (error) {
+                console.error('Error fetching universe ID:', error);
+                return null;
+            }
+        }
+
+        async function fetchGameDetails(universeId) {
+            try {
+                const response = await fetch(`https://games.roproxy.com/v1/games?universeIds=${universeId}`);
+                const data = await response.json();
+                return data.data[0];
+            } catch (error) {
+                console.error('Error fetching game details:', error);
+                return null;
+            }
+        }
+
+        async function fetchThumbnail(universeId) {
+            try {
+                const response = await fetch(`https://thumbnails.roproxy.com/v1/games/icons?universeIds=${universeId}&size=512x512&format=Png&isCircular=false`);
+                const data = await response.json();
+                return data.data[0].imageUrl;
+            } catch (error) {
+                console.error('Error fetching thumbnail:', error);
+                return null;
+            }
+        }
+
+        function formatNumber(num) {
+            if (num >= 1000000) {
+                return (num / 1000000).toFixed(1) + 'M';
+            } else if (num >= 1000) {
+                return (num / 1000).toFixed(1) + 'K';
+            }
+            return num;
+        }
+
+        function updateNumber(element, newValue, isTotal = false) {
+            const currentValue = parseInt(element.getAttribute('data-ccu')) || 0;
+            
+            // Only update and animate if the value has changed
+            if (currentValue !== newValue) {
+                element.classList.add('updating');
+                
+                setTimeout(() => {
+                    // Different format for total vs game CCU
+                    if (isTotal) {
+                        element.innerHTML = `<span>${formatNumber(newValue)}</span>`;
+                    } else {
+                        element.innerHTML = `<span>👥 ${formatNumber(newValue)} playing</span>`;
+                    }
+                    element.setAttribute('data-ccu', newValue);
+                }, 250);
+
+                setTimeout(() => {
+                    element.classList.remove('updating');
+                }, 500);
+            }
+        }
+
+        async function updateCCU() {
+            let totalPlaying = 0;
+            
+            for (const placeId of PLACE_IDS) {
+                const universeId = await fetchUniverseId(placeId);
+                if (!universeId) continue;
+
+                const gameDetails = await fetchGameDetails(universeId);
+                if (!gameDetails) continue;
+
+                // Update individual game card CCU
+                const gameCard = document.querySelector(`[data-placeid="${placeId}"]`);
+                if (gameCard) {
+                    const ccuElement = gameCard.querySelector('.game-ccu');
+                    const newCCU = gameDetails.playing || 0;
+                    updateNumber(ccuElement, newCCU, false);  // Game CCU
+                }
+
+                totalPlaying += gameDetails.playing || 0;
+            }
+
+            // Update total CCU with isTotal flag
+            const totalElement = document.getElementById('totalPlaying');
+            updateNumber(totalElement, totalPlaying, true);  // Total CCU
+        }
+
+        async function displayGames() {
+            const gamesContainer = document.getElementById('gamesContainer');
+            let totalPlaying = 0;
+            let totalVisits = 0;
+
+            for (const placeId of PLACE_IDS) {
+                const universeId = await fetchUniverseId(placeId);
+                if (!universeId) continue;
+
+                const gameDetails = await fetchGameDetails(universeId);
+                if (!gameDetails) continue;
+
+                const thumbnailUrl = await fetchThumbnail(universeId);
+
+                const gameCard = document.createElement('div');
+                gameCard.className = 'game-card';
+                gameCard.setAttribute('data-placeid', placeId);
+                gameCard.innerHTML = `
+                    <img src="${thumbnailUrl}" alt="${gameDetails.name}" class="game-thumbnail">
+                    <div class="game-info">
+                        <div class="game-title">${gameDetails.name}</div>
+                        <div class="game-stats">
+                            <span class="game-ccu" data-ccu="${gameDetails.playing}">👥 ${formatNumber(gameDetails.playing)} playing</span>
+                            <span>👁️ ${formatNumber(gameDetails.visits)} visits</span>
+                        </div>
+                    </div>
+                `;
+
+                gameCard.addEventListener('click', () => {
+                    window.open(`https://www.roblox.com/games/${placeId}`, '_blank');
+                });
+
+                gamesContainer.appendChild(gameCard);
+
+                totalPlaying += gameDetails.playing || 0;
+                totalVisits += gameDetails.visits || 0;
+            }
+
+            // Initialize total stats with data attributes
+            const totalPlayingElement = document.getElementById('totalPlaying');
+            totalPlayingElement.setAttribute('data-total', totalPlaying);
+            totalPlayingElement.textContent = formatNumber(totalPlaying);
+            
+            document.getElementById('totalVisits').textContent = formatNumber(totalVisits);
+
+            setInterval(updateCCU, 10000);
+        }
+
+        displayGames();
+    </script>
+</body>
+</html>
